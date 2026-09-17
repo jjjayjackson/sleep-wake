@@ -13,11 +13,7 @@
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div id="edge" class="edge" aria-hidden="true"></div>
-
   <main class="app">
-    <button type="button" id="history-notch" class="history-notch" aria-label="Open history"></button>
-
     <section id="chooser" class="chooser">
       <button type="button" id="choose-sleep">SLEEP</button>
       <button type="button" id="choose-awake">AWAKE</button>
@@ -46,10 +42,12 @@
   <aside id="history" class="history" aria-hidden="true">
     <h1>History</h1>
     <div id="history-list" class="history-list"></div>
-    <div id="history-footer" class="history-footer" hidden>
-      <button type="button" id="history-clear" class="history-clear">Clear history</button>
-    </div>
   </aside>
+
+  <div class="history-controls">
+    <button type="button" id="history-clear" class="history-clear" hidden>Clear history</button>
+    <button type="button" id="history-toggle" class="history-toggle" aria-expanded="false">History</button>
+  </div>
 
   <div id="editor" class="editor" hidden>
     <div class="editor-card" role="dialog" aria-labelledby="editor-title">

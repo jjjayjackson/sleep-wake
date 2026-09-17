@@ -45,7 +45,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: calc(var(--safe-top) + 24px) 24px calc(var(--safe-bottom) + 24px);
+  padding: calc(var(--safe-top) + 24px) 24px calc(var(--safe-bottom) + 120px);
 }
 
 .chooser,
@@ -109,37 +109,39 @@ button:active {
   background: #2c2c2e;
 }
 
-.edge {
+.history-controls {
   position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 24px;
-  z-index: 12;
-  touch-action: none;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 10px);
+  z-index: 35;
+  width: min(393px, 100%);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 16px;
+  pointer-events: none;
 }
 
-.history-notch {
-  position: absolute;
-  left: 0;
-  bottom: calc(var(--safe-bottom) + 28px);
-  z-index: 13;
-  width: 10px;
+.history-toggle,
+.history-clear {
+  pointer-events: auto;
+  width: auto;
   min-height: 44px;
-  height: 44px;
-  padding: 0;
-  border-radius: 0 10px 10px 0;
-  background: #3a3a3c;
-  letter-spacing: 0;
+  padding: 8px 16px;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
-.history-notch:active {
-  background: #3a3a3c;
-}
-
-body.history-open .edge,
-body.history-open .history-notch {
-  display: none;
+.history-toggle:active,
+.history-clear:active {
+  background: #1c1c1e;
 }
 
 .scrim {
@@ -161,7 +163,6 @@ body.history-open .history-notch {
   background: var(--bg);
   transform: translateX(-100%);
   overflow: hidden;
-  touch-action: none;
 }
 
 .history.is-open {
@@ -187,7 +188,7 @@ body.history-open .history-notch {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0 24px 16px;
+  padding: 0 24px calc(var(--safe-bottom) + 112px);
   touch-action: pan-y;
 }
 
@@ -228,24 +229,6 @@ body.history-open .history-notch {
 
 .history-event.is-pressing {
   color: var(--muted);
-}
-
-.history-footer {
-  flex: none;
-  padding: 8px 24px calc(var(--safe-bottom) + 16px);
-}
-
-.history-clear {
-  min-height: 52px;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  background: transparent;
-  color: var(--muted);
-}
-
-.history-clear:active {
-  background: #1c1c1e;
 }
 
 .history-gap {

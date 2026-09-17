@@ -1,6 +1,4 @@
 const STORAGE_KEY = "sleep-wake.events";
-const EDGE_WIDTH = 24;
-const OPEN_THRESHOLD = 72;
 const DELETE_THRESHOLD = 80;
 const LONG_PRESS_MS = 1400;
 const MOVE_CANCEL_PX = 12;
@@ -20,12 +18,11 @@ const editorState = document.getElementById("editor-state");
 const editorTime = document.getElementById("editor-time");
 const editorError = document.getElementById("editor-error");
 const historyClear = document.getElementById("history-clear");
-const historyFooter = document.getElementById("history-footer");
+const historyToggle = document.getElementById("history-toggle");
 
 let events = loadEvents();
 let tickId = null;
 let historyOpen = false;
-let historyWidth = 0;
 let suppressClick = false;
 let suppressClickTimer = null;
 
@@ -189,7 +186,7 @@ function renderMain() {
 
 function renderHistory() {
   historyList.replaceChildren();
-  historyFooter.hidden = events.length === 0;
+  historyClear.hidden = events.length === 0;
 
   if (!events.length) {
     const empty = document.createElement("p");
@@ -257,6 +254,8 @@ function setHistoryOpen(open, { animate = true } = {}) {
   historyEl.classList.toggle("is-open", open);
   historyEl.style.transform = "";
   historyEl.setAttribute("aria-hidden", open ? "false" : "true");
+  historyToggle.textContent = open ? "Hide history" : "History";
+  historyToggle.setAttribute("aria-expanded", open ? "true" : "false");
   scrim.hidden = !open;
   document.body.classList.toggle("history-open", open);
   if (open) {
@@ -266,84 +265,10 @@ function setHistoryOpen(open, { animate = true } = {}) {
   }
 }
 
-function bindDrawer() {
-  let drag = null;
-
-  function startDrag(event, fromOpen) {
-    if (editor.hidden === false) return;
-    historyWidth = historyEl.getBoundingClientRect().width || 1;
-    drag = {
-      id: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      fromOpen,
-      axis: null,
-      moved: false,
-    };
-    if (!fromOpen) {
-      historyEl.classList.remove("is-animating", "is-open");
-      scrim.hidden = false;
-    }
-  }
-
-  function onOpenPointerDown(event) {
-    if (event.pointerType === "mouse" && event.button !== 0) return;
-    if (historyOpen || editor.hidden === false) return;
-    if (event.clientX > EDGE_WIDTH) return;
-    startDrag(event, false);
+function bindHistoryControls() {
+  historyToggle.addEventListener("click", (event) => {
     event.preventDefault();
-  }
-
-  historyEl.addEventListener("pointerdown", (event) => {
-    if (!historyOpen || editor.hidden === false) return;
-    if (event.pointerType === "mouse" && event.button !== 0) return;
-    if (event.target.closest(".history-item, .history-clear")) return;
-    startDrag(event, true);
-  });
-
-  window.addEventListener("pointermove", (event) => {
-    if (!drag || event.pointerId !== drag.id) return;
-    const dx = event.clientX - drag.startX;
-    const dy = event.clientY - drag.startY;
-
-    if (!drag.axis) {
-      if (Math.abs(dx) < MOVE_CANCEL_PX && Math.abs(dy) < MOVE_CANCEL_PX) return;
-      drag.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
-      if (drag.axis === "y") {
-        drag = null;
-        if (!historyOpen) setHistoryOpen(false, { animate: false });
-        return;
-      }
-      drag.moved = true;
-      historyEl.classList.remove("is-animating", "is-open");
-      document.body.classList.add("history-open");
-      scrim.hidden = false;
-    }
-
-    const x = drag.fromOpen ? historyWidth + dx : dx;
-    const progress = Math.max(0, Math.min(1, x / historyWidth));
-    historyEl.style.transform = `translateX(${(progress - 1) * 100}%)`;
-    event.preventDefault();
-  }, { passive: false });
-
-  function finishDrag(event) {
-    if (!drag || event.pointerId !== drag.id) return;
-    const dx = event.clientX - drag.startX;
-    const x = drag.fromOpen ? historyWidth + dx : dx;
-    const shouldOpen = drag.moved ? x > OPEN_THRESHOLD : drag.fromOpen;
-    if (drag.moved) armClickSuppress();
-    drag = null;
-    setHistoryOpen(shouldOpen);
-  }
-
-  window.addEventListener("pointerup", finishDrag);
-  window.addEventListener("pointercancel", finishDrag);
-
-  document.getElementById("edge").addEventListener("pointerdown", onOpenPointerDown);
-
-  document.getElementById("history-notch").addEventListener("click", (event) => {
-    event.preventDefault();
-    setHistoryOpen(true);
+    setHistoryOpen(!historyOpen);
   });
 
   scrim.addEventListener("click", () => {
@@ -496,7 +421,7 @@ document.addEventListener("click", (event) => {
 }, true);
 
 document.addEventListener("contextmenu", (event) => {
-  if (event.target.closest(".history-event, .edge, .history")) {
+  if (event.target.closest(".history-event, .history")) {
     event.preventDefault();
   }
 });
@@ -508,6 +433,6 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-bindDrawer();
+bindHistoryControls();
 render();
 scheduleTick();
