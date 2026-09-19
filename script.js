@@ -37,7 +37,6 @@ const editorState = document.getElementById("editor-state");
 const editorTime = document.getElementById("editor-time");
 const editorError = document.getElementById("editor-error");
 const historyClear = document.getElementById("history-clear");
-const copyData = document.getElementById("copy-data");
 const historyToggle = document.getElementById("history-toggle");
 
 let events = [];
@@ -82,25 +81,6 @@ function readLocalEvents() {
     return normalizeEvents(JSON.parse(raw));
   } catch {
     return [];
-  }
-}
-
-function setCopyDataLabel(text) {
-  copyData.textContent = text;
-  clearTimeout(copyData._labelTimer);
-  copyData._labelTimer = setTimeout(() => {
-    copyData.textContent = "Copy Data";
-  }, 1600);
-}
-
-async function copyStoredData() {
-  const json = JSON.stringify(readLocalEvents(), null, 2);
-  try {
-    if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
-    await navigator.clipboard.writeText(json);
-    setCopyDataLabel("Data copied");
-  } catch {
-    setCopyDataLabel("Copy failed");
   }
 }
 
@@ -309,7 +289,6 @@ function renderMain() {
 }
 
 function syncHistoryActionButtons() {
-  copyData.hidden = !historyOpen;
   historyClear.hidden = !historyOpen || events.length === 0;
 }
 
@@ -533,7 +512,6 @@ switchBtn.addEventListener("click", () => {
 document.getElementById("editor-now").addEventListener("click", changeLatestToNow);
 document.getElementById("editor-cancel").addEventListener("click", closeEditor);
 historyClear.addEventListener("click", clearHistory);
-copyData.addEventListener("click", copyStoredData);
 
 editor.addEventListener("click", (event) => {
   if (event.target === editor) closeEditor();
