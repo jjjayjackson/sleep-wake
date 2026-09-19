@@ -1,7 +1,26 @@
 const STORAGE_KEY = "sleep-wake.events";
+const TABLE = "sleep_wake_events";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DELETE_THRESHOLD = 80;
 const LONG_PRESS_MS = 1400;
 const MOVE_CANCEL_PX = 12;
+
+const supabase = window.supabase.createClient(
+  window.SLEEP_WAKE_SUPABASE.url,
+  window.SLEEP_WAKE_SUPABASE.anonKey,
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storage: {
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {},
+      },
+    },
+  },
+);
 
 const chooser = document.getElementById("chooser");
 const active = document.getElementById("active");
@@ -18,9 +37,11 @@ const editorState = document.getElementById("editor-state");
 const editorTime = document.getElementById("editor-time");
 const editorError = document.getElementById("editor-error");
 const historyClear = document.getElementById("history-clear");
+const copyData = document.getElementById("copy-data");
 const historyToggle = document.getElementById("history-toggle");
 
-let events = loadEvents();
+let events = [];
+let booted = false;
 let tickId = null;
 let historyOpen = false;
 let suppressClick = false;
@@ -38,27 +59,120 @@ function pad2(n) {
   return String(n).padStart(2, "0");
 }
 
-function loadEvents() {
+function isUuid(value) {
+  return typeof value === "string" && UUID_RE.test(value);
+}
+
+function normalizeEvents(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((item) => item && (item.state === "sleep" || item.state === "awake") && Number.isFinite(item.at))
+    .map((item) => ({
+      id: String(item.id ?? item.at),
+      state: item.state,
+      at: Number(item.at),
+    }))
+    .sort((a, b) => a.at - b.at);
+}
+
+function readLocalEvents() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((item) => item && (item.state === "sleep" || item.state === "awake") && Number.isFinite(item.at))
-      .map((item) => ({
-        id: String(item.id ?? item.at),
-        state: item.state,
-        at: Number(item.at),
-      }))
-      .sort((a, b) => a.at - b.at);
+    return normalizeEvents(JSON.parse(raw));
   } catch {
     return [];
   }
 }
 
-function saveEvents() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+function setCopyDataLabel(text) {
+  copyData.textContent = text;
+  clearTimeout(copyData._labelTimer);
+  copyData._labelTimer = setTimeout(() => {
+    copyData.textContent = "Copy Data";
+  }, 1600);
+}
+
+async function copyStoredData() {
+  const json = JSON.stringify(readLocalEvents(), null, 2);
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+    await navigator.clipboard.writeText(json);
+    setCopyDataLabel("Data copied");
+  } catch {
+    setCopyDataLabel("Copy failed");
+  }
+}
+
+function rowToEvent(row) {
+  const at = new Date(row.occurred_at).getTime();
+  return {
+    id: String(row.id),
+    state: row.state,
+    at,
+  };
+}
+
+function eventToRow(event) {
+  return {
+    id: event.id,
+    state: event.state,
+    occurred_at: new Date(event.at).toISOString(),
+  };
+}
+
+async function loadEvents() {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select("id, state, occurred_at")
+    .order("occurred_at", { ascending: true });
+
+  if (error) throw error;
+  return normalizeEvents((data || []).map(rowToEvent));
+}
+
+async function migrateLocalEvents() {
+  const local = readLocalEvents();
+  if (!local.length) return;
+
+  const rows = local.map((event) => eventToRow({
+    ...event,
+    id: isUuid(event.id) ? event.id : newId(),
+  }));
+
+  const { error } = await supabase.from(TABLE).upsert(rows);
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+async function persistInsert(event) {
+  const { error } = await supabase.from(TABLE).insert(eventToRow(event));
+  if (error) console.error(error);
+}
+
+async function persistUpdate(event) {
+  const { error } = await supabase
+    .from(TABLE)
+    .update({
+      state: event.state,
+      occurred_at: new Date(event.at).toISOString(),
+    })
+    .eq("id", event.id);
+  if (error) console.error(error);
+}
+
+async function persistDelete(id) {
+  const { error } = await supabase.from(TABLE).delete().eq("id", id);
+  if (error) console.error(error);
+}
+
+async function persistClear() {
+  const { error } = await supabase.from(TABLE).delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  if (error) console.error(error);
 }
 
 function currentEvent() {
@@ -113,21 +227,27 @@ function formatGap(ms) {
 
 function newId() {
   if (crypto.randomUUID) return crypto.randomUUID();
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function switchTo(kind) {
   const current = currentEvent();
   if (current && current.state === kind) return;
 
-  events.push({
+  const event = {
     id: newId(),
     state: kind,
     at: Date.now(),
-  });
-  saveEvents();
+  };
+  events.push(event);
   render();
   scheduleTick();
+  persistInsert(event);
 }
 
 function isValidTimestamp(index, nextAt) {
@@ -142,31 +262,35 @@ function applyTimestamp(index, nextAt) {
   if (!isValidTimestamp(index, nextAt)) return false;
   events[index] = { ...events[index], at: nextAt };
   events.sort((a, b) => a.at - b.at);
-  saveEvents();
+  persistUpdate(events[index]);
   render();
   scheduleTick();
   return true;
 }
 
-function persistEvents() {
-  saveEvents();
+function deleteEvent(id) {
+  events = events.filter((event) => event.id !== id);
+  persistDelete(id);
   closeEditor();
   render();
   scheduleTick();
 }
 
-function deleteEvent(id) {
-  events = events.filter((event) => event.id !== id);
-  persistEvents();
-}
-
 function clearHistory() {
   events = [];
-  persistEvents();
+  persistClear();
+  closeEditor();
+  render();
+  scheduleTick();
 }
 
 function renderMain() {
   const current = currentEvent();
+  if (!booted) {
+    chooser.hidden = true;
+    active.hidden = true;
+    return;
+  }
   if (!current) {
     chooser.hidden = false;
     active.hidden = true;
@@ -184,9 +308,14 @@ function renderMain() {
   switchBtn.textContent = sleeping ? "AWAKE" : "SLEEP";
 }
 
+function syncHistoryActionButtons() {
+  copyData.hidden = !historyOpen;
+  historyClear.hidden = !historyOpen || events.length === 0;
+}
+
 function renderHistory() {
   historyList.replaceChildren();
-  historyClear.hidden = events.length === 0;
+  syncHistoryActionButtons();
 
   if (!events.length) {
     const empty = document.createElement("p");
@@ -256,6 +385,7 @@ function setHistoryOpen(open, { animate = true } = {}) {
   historyEl.setAttribute("aria-hidden", open ? "false" : "true");
   historyToggle.textContent = open ? "Hide history" : "History";
   historyToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  syncHistoryActionButtons();
   scrim.hidden = !open;
   document.body.classList.toggle("history-open", open);
   if (open) {
@@ -403,6 +533,7 @@ switchBtn.addEventListener("click", () => {
 document.getElementById("editor-now").addEventListener("click", changeLatestToNow);
 document.getElementById("editor-cancel").addEventListener("click", closeEditor);
 historyClear.addEventListener("click", clearHistory);
+copyData.addEventListener("click", copyStoredData);
 
 editor.addEventListener("click", (event) => {
   if (event.target === editor) closeEditor();
@@ -433,6 +564,18 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+async function boot() {
+  try {
+    await migrateLocalEvents();
+    events = await loadEvents();
+  } catch (error) {
+    console.error(error);
+    events = [];
+  }
+  booted = true;
+  render();
+  scheduleTick();
+}
+
 bindHistoryControls();
-render();
-scheduleTick();
+boot();

@@ -14,7 +14,7 @@
 </head>
 <body>
   <main class="app">
-    <section id="chooser" class="chooser">
+    <section id="chooser" class="chooser" hidden>
       <button type="button" id="choose-sleep">SLEEP</button>
       <button type="button" id="choose-awake">AWAKE</button>
     </section>
@@ -46,6 +46,7 @@
 
   <div class="history-controls">
     <button type="button" id="history-clear" class="history-clear" hidden>Clear history</button>
+    <button type="button" id="copy-data" class="history-clear" hidden>Copy Data</button>
     <button type="button" id="history-toggle" class="history-toggle" aria-expanded="false">History</button>
   </div>
 
@@ -60,6 +61,8 @@
     </div>
   </div>
 
+  <script src="./vendor/supabase.js"></script>
+  <script src="./supabase-config.js"></script>
   <script src="./script.js"></script>
 </body>
 </html>
