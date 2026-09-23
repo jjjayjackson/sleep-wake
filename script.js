@@ -303,7 +303,7 @@ function renderHistory() {
     row.className = "history-event";
     const when = document.createElement("span");
     when.className = "history-when";
-    const label = event.state === "sleep" ? "Sleep" : "Awake";
+    const label = event.state === "sleep" ? "Went to sleep" : "Woke up";
     when.textContent = `${label} — ${formatClock(event.at)}`;
     row.append(when);
 
