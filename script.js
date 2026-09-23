@@ -36,7 +36,6 @@ const editor = document.getElementById("editor");
 const editorState = document.getElementById("editor-state");
 const editorTime = document.getElementById("editor-time");
 const editorError = document.getElementById("editor-error");
-const historyClear = document.getElementById("history-clear");
 const historyToggle = document.getElementById("history-toggle");
 
 let events = [];
@@ -150,11 +149,6 @@ async function persistDelete(id) {
   if (error) console.error(error);
 }
 
-async function persistClear() {
-  const { error } = await supabase.from(TABLE).delete().neq("id", "00000000-0000-0000-0000-000000000000");
-  if (error) console.error(error);
-}
-
 function currentEvent() {
   return events[events.length - 1] ?? null;
 }
@@ -256,14 +250,6 @@ function deleteEvent(id) {
   scheduleTick();
 }
 
-function clearHistory() {
-  events = [];
-  persistClear();
-  closeEditor();
-  render();
-  scheduleTick();
-}
-
 function renderMain() {
   const current = currentEvent();
   if (!booted) {
@@ -288,13 +274,8 @@ function renderMain() {
   switchBtn.textContent = sleeping ? "AWAKE" : "SLEEP";
 }
 
-function syncHistoryActionButtons() {
-  historyClear.hidden = !historyOpen || events.length === 0;
-}
-
 function renderHistory() {
   historyList.replaceChildren();
-  syncHistoryActionButtons();
 
   if (!events.length) {
     const empty = document.createElement("p");
@@ -320,22 +301,26 @@ function renderHistory() {
 
     const row = document.createElement("p");
     row.className = "history-event";
+    const when = document.createElement("span");
+    when.className = "history-when";
     const label = event.state === "sleep" ? "Sleep" : "Awake";
-    row.textContent = `${label} — ${formatClock(event.at)}`;
+    when.textContent = `${label} — ${formatClock(event.at)}`;
+    row.append(when);
+
+    if (index > 0) {
+      const previous = events[index - 1];
+      const duration = document.createElement("span");
+      duration.className = "history-duration";
+      const phrase = previous.state === "sleep" ? "Slept for" : "Awake for";
+      duration.textContent = `(${phrase} ${formatGap(event.at - previous.at)})`;
+      row.append(duration);
+    }
+
     const isLatest = index === events.length - 1;
     if (isLatest) row.classList.add("is-latest");
     item.append(row);
     bindHistoryRow(item, row, event.id, isLatest);
     historyList.append(item);
-
-    const gap = document.createElement("p");
-    gap.className = "history-gap";
-    if (isLatest) {
-      gap.textContent = "ongoing";
-    } else {
-      gap.textContent = formatGap(events[index + 1].at - event.at);
-    }
-    historyList.append(gap);
   });
 }
 
@@ -364,7 +349,6 @@ function setHistoryOpen(open, { animate = true } = {}) {
   historyEl.setAttribute("aria-hidden", open ? "false" : "true");
   historyToggle.textContent = open ? "Hide history" : "History";
   historyToggle.setAttribute("aria-expanded", open ? "true" : "false");
-  syncHistoryActionButtons();
   scrim.hidden = !open;
   document.body.classList.toggle("history-open", open);
   if (open) {
@@ -511,7 +495,6 @@ switchBtn.addEventListener("click", () => {
 
 document.getElementById("editor-now").addEventListener("click", changeLatestToNow);
 document.getElementById("editor-cancel").addEventListener("click", closeEditor);
-historyClear.addEventListener("click", clearHistory);
 
 editor.addEventListener("click", (event) => {
   if (event.target === editor) closeEditor();
@@ -519,10 +502,6 @@ editor.addEventListener("click", (event) => {
 
 document.addEventListener("click", (event) => {
   if (!suppressClick) return;
-  if (event.target.closest("#history-clear")) {
-    suppressClick = false;
-    return;
-  }
   event.preventDefault();
   event.stopPropagation();
   suppressClick = false;
